@@ -8,3 +8,19 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Dados e artefatos (LGPD + tamanho)
+data/**
+!data/**/.gitkeep
+models/*
+!models/.gitkeep
+
+# Credenciais
+.env
+kaggle.json
+
+# Ambiente
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
