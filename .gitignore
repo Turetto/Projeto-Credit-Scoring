@@ -10,8 +10,8 @@ wheels/
 .venv
 
 # Dados e artefatos (LGPD + tamanho)
-data/**
-!data/**/.gitkeep
+data/*/*
+!data/*/.gitkeep
 models/*
 !models/.gitkeep
 
