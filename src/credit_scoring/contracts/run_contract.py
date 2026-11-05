@@ -14,12 +14,23 @@ def _falhas(schema: type, df: pd.DataFrame) -> pd.DataFrame:
 
 
 def resumo(fc: pd.DataFrame) -> pd.Series:
-    """Linhas únicas afetadas por regra; regras de lote/schema aparecem como 'lote'."""
+    """Linhas únicas afetadas por regra; regras de lote/schema aparecem como 'lote'.
+
+    Regras de coluna são prefixadas pela coluna (ex.: AMT_ANNUITY:not_nullable).
+    """
     if fc.empty:
         return pd.Series(dtype=object)
+    chave = (
+        fc["check"]
+        .astype(str)
+        .where(
+            fc["schema_context"] != "Column",
+            fc["column"].astype(str) + ":" + fc["check"].astype(str),
+        )
+    )
     return (
-        fc.assign(check=fc["check"].astype(str))
-        .groupby("check")["index"]
+        fc.assign(regra=chave)
+        .groupby("regra")["index"]
         .agg(lambda s: s.nunique() if s.notna().any() else "lote")
     )
 

@@ -1,0 +1,17 @@
+{
+  "train": {
+    "linhas_entrada": 184506,
+    "linhas_removidas": 8,
+    "por_regra": {
+      "less_than_or_equal_to(50000000)": 1,
+      "not_nullable": 7
+    }
+  },
+  "test": {
+    "linhas_entrada": 46127,
+    "linhas_removidas": 2,
+    "por_regra": {
+      "not_nullable": 2
+    }
+  }
+}
