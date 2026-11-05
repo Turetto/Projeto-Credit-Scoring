@@ -20,6 +20,7 @@ def resumo(fc: pd.DataFrame) -> pd.Series:
     """
     if fc.empty:
         return pd.Series(dtype=object)
+
     chave = (
         fc["check"]
         .astype(str)
@@ -28,6 +29,8 @@ def resumo(fc: pd.DataFrame) -> pd.Series:
             fc["column"].astype(str) + ":" + fc["check"].astype(str),
         )
     )
+    chave = chave.str.replace(r"\(\[.*\]\)", "", regex=True)  # isin([...]) → isin
+
     return (
         fc.assign(regra=chave)
         .groupby("regra")["index"]

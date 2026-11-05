@@ -101,8 +101,9 @@ class ApplicationSchema(pa.DataFrameModel):
 
     @pa.dataframe_check(name="parcela_menor_que_credito", ignore_na=False)
     def _parcela_credito(cls, df: pd.DataFrame) -> Series[bool]:
-        # Nulidade é responsabilidade de AMT_ANNUITY (nullable=False); aqui só a relação
-        return df["AMT_ANNUITY"].isna() | (df["AMT_ANNUITY"] < df["AMT_CREDIT"])
+        # Relação só é avaliada com operandos válidos; nulidade e sinal têm regras próprias
+        operandos_invalidos = df["AMT_ANNUITY"].isna() | (df["AMT_CREDIT"] <= 0)
+        return operandos_invalidos | (df["AMT_ANNUITY"] < df["AMT_CREDIT"])
 
     @pa.dataframe_check(name="emprego_menor_que_idade", ignore_na=False)
     def _emprego_idade(cls, df: pd.DataFrame) -> Series[bool]:
@@ -149,7 +150,7 @@ class AlertSchema(pa.DataFrameModel):
 
     @pa.dataframe_check(name="alerta_renda_acima_1M", ignore_na=False)
     def _renda(cls, df: pd.DataFrame) -> Series[bool]:
-        return df["AMT_INCOME_TOTAL"] <= RENDA_ALERTA
+        return df["AMT_INCOME_TOTAL"].isna() | (df["AMT_INCOME_TOTAL"] <= RENDA_ALERTA)
 
     @pa.dataframe_check(name="alerta_filhos_acima_10", ignore_na=False)
     def _filhos(cls, df: pd.DataFrame) -> Series[bool]:
