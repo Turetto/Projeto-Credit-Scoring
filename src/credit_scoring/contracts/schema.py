@@ -113,36 +113,6 @@ class ApplicationSchema(pa.DataFrameModel):
     def _bem_cash(cls, df: pd.DataFrame) -> Series[bool]:
         return (df["NAME_CONTRACT_TYPE"] != "Cash loans") | df["AMT_GOODS_PRICE"].notna()
 
-    # ---------------- Alertas ----------------
-    @pa.check("CODE_GENDER", name="alerta_genero_fora_de_FM", raise_warning=True)
-    def _genero(cls, s: Series[str]) -> Series[bool]:
-        return s.isin(["F", "M"])
-
-    @pa.check("NAME_FAMILY_STATUS", name="alerta_familia_unknown", raise_warning=True)
-    def _familia(cls, s: Series[str]) -> Series[bool]:
-        return s != "Unknown"
-
-    @pa.check("DAYS_BIRTH", name="alerta_idade_fora_21_70", raise_warning=True)
-    def _idade_alerta(cls, s: Series[int]) -> Series[bool]:
-        return _anos(s).between(*IDADE_ALERTA)
-
-    @pa.check("AMT_INCOME_TOTAL", name="alerta_renda_acima_1M", raise_warning=True)
-    def _renda_alerta(cls, s: Series[float]) -> Series[bool]:
-        return s <= RENDA_ALERTA
-
-    @pa.check("CNT_CHILDREN", name="alerta_filhos_acima_10", raise_warning=True)
-    def _filhos_alerta(cls, s: Series[int]) -> Series[bool]:
-        return s <= FILHOS_ALERTA
-
-    @pa.dataframe_check(name="alerta_bem_maior_que_credito", raise_warning=True, ignore_na=False)
-    def _bem_credito(cls, df: pd.DataFrame) -> Series[bool]:
-        return df["AMT_GOODS_PRICE"].isna() | (df["AMT_GOODS_PRICE"] <= df["AMT_CREDIT"])
-
-    @pa.dataframe_check(name="alerta_sentinela_sem_pensao", raise_warning=True, ignore_na=False)
-    def _sentinela_pensao(cls, df: pd.DataFrame) -> Series[bool]:
-        sentinela = df["DAYS_EMPLOYED"] == SENTINELA_EMPREGO
-        return ~sentinela | df["NAME_INCOME_TYPE"].isin(["Pensioner", "Unemployed"])
-
     @pa.check(
         "EXT_SOURCE_1",
         "EXT_SOURCE_2",
@@ -153,3 +123,58 @@ class ApplicationSchema(pa.DataFrameModel):
     )
     def _taxa_nulos(cls, s: Series[float]) -> bool:
         return s.isna().mean() <= NULOS_MAX[s.name]
+
+
+class AlertSchema(pa.DataFrameModel):
+    """Regras de alerta: violação é registrada e o lote segue.
+
+    Schema separado para que alertas gerem failure_cases estruturado
+    (contável por regra), e não warnings em texto livre.
+    """
+
+    class Config:
+        strict = False  # só lê colunas; estrutura já é garantida pelo ApplicationSchema
+
+    @pa.dataframe_check(name="alerta_genero_fora_de_FM", ignore_na=False)
+    def _genero(cls, df: pd.DataFrame) -> Series[bool]:
+        return df["CODE_GENDER"].isin(["F", "M"])
+
+    @pa.dataframe_check(name="alerta_familia_unknown", ignore_na=False)
+    def _familia(cls, df: pd.DataFrame) -> Series[bool]:
+        return df["NAME_FAMILY_STATUS"] != "Unknown"
+
+    @pa.dataframe_check(name="alerta_idade_fora_21_70", ignore_na=False)
+    def _idade(cls, df: pd.DataFrame) -> Series[bool]:
+        return _anos(df["DAYS_BIRTH"]).between(*IDADE_ALERTA)
+
+    @pa.dataframe_check(name="alerta_renda_acima_1M", ignore_na=False)
+    def _renda(cls, df: pd.DataFrame) -> Series[bool]:
+        return df["AMT_INCOME_TOTAL"] <= RENDA_ALERTA
+
+    @pa.dataframe_check(name="alerta_filhos_acima_10", ignore_na=False)
+    def _filhos(cls, df: pd.DataFrame) -> Series[bool]:
+        return df["CNT_CHILDREN"] <= FILHOS_ALERTA
+
+    @pa.dataframe_check(name="alerta_bem_maior_que_credito_cash", ignore_na=False)
+    def _bem_credito(cls, df: pd.DataFrame) -> Series[bool]:
+        # Só em Cash loans: no rotativo o valor do bem não limita o crédito (achado da 1.2)
+        nao_cash = df["NAME_CONTRACT_TYPE"] != "Cash loans"
+        return nao_cash | df["AMT_GOODS_PRICE"].isna() | (df["AMT_GOODS_PRICE"] <= df["AMT_CREDIT"])
+
+    @pa.dataframe_check(name="alerta_sentinela_sem_pensao", ignore_na=False)
+    def _sentinela(cls, df: pd.DataFrame) -> Series[bool]:
+        sentinela = df["DAYS_EMPLOYED"] == SENTINELA_EMPREGO
+        return ~sentinela | df["NAME_INCOME_TYPE"].isin(["Pensioner", "Unemployed"])
+
+    # Regras de lote (retornam escalar)
+    @pa.dataframe_check(name="alerta_nulos_EXT_SOURCE_1", ignore_na=False)
+    def _nulos_1(cls, df: pd.DataFrame) -> bool:
+        return df["EXT_SOURCE_1"].isna().mean() <= NULOS_MAX["EXT_SOURCE_1"]
+
+    @pa.dataframe_check(name="alerta_nulos_EXT_SOURCE_2", ignore_na=False)
+    def _nulos_2(cls, df: pd.DataFrame) -> bool:
+        return df["EXT_SOURCE_2"].isna().mean() <= NULOS_MAX["EXT_SOURCE_2"]
+
+    @pa.dataframe_check(name="alerta_nulos_EXT_SOURCE_3", ignore_na=False)
+    def _nulos_3(cls, df: pd.DataFrame) -> bool:
+        return df["EXT_SOURCE_3"].isna().mean() <= NULOS_MAX["EXT_SOURCE_3"]
