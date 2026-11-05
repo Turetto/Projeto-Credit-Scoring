@@ -1,0 +1,60 @@
+{
+  "campeao": "xgboost",
+  "ganho_auc_xgb_sobre_logreg": 0.0184,
+  "threshold_ks": 0.0867,
+  "taxa_aprovacao_teste": 0.6924,
+  "features": [
+    "AMT_CREDIT",
+    "AMT_ANNUITY",
+    "AMT_GOODS_PRICE",
+    "AMT_INCOME_TOTAL",
+    "AGE_YEARS",
+    "YEARS_EMPLOYED",
+    "FLAG_EMPLOYED_ANOMALY",
+    "CNT_CHILDREN",
+    "REGION_RATING_CLIENT",
+    "EXT_SOURCE_1",
+    "EXT_SOURCE_2",
+    "EXT_SOURCE_3",
+    "CREDIT_INCOME_RATIO",
+    "ANNUITY_INCOME_RATIO",
+    "ANNUITY_CREDIT_RATIO",
+    "NAME_CONTRACT_TYPE",
+    "NAME_INCOME_TYPE",
+    "NAME_FAMILY_STATUS",
+    "NAME_EDUCATION_TYPE",
+    "FLAG_OWN_CAR",
+    "FLAG_OWN_REALTY"
+  ],
+  "cv_oof": {
+    "logreg": {
+      "auc": 0.741,
+      "gini": 0.4819,
+      "ks": 0.3563,
+      "pr_auc": 0.2193,
+      "brier": 0.0689,
+      "pd_media_prevista": 0.0807,
+      "taxa_default_observada": 0.0807
+    },
+    "xgboost": {
+      "auc": 0.7594,
+      "gini": 0.5189,
+      "ks": 0.3869,
+      "pr_auc": 0.2406,
+      "brier": 0.0679,
+      "pd_media_prevista": 0.0806,
+      "taxa_default_observada": 0.0807
+    }
+  },
+  "teste": {
+    "auc": 0.7596,
+    "gini": 0.5191,
+    "ks": 0.3913,
+    "pr_auc": 0.2463,
+    "brier": 0.0677,
+    "pd_media_prevista": 0.0806,
+    "taxa_default_observada": 0.0807
+  },
+  "linhas_treino": 184498,
+  "treinado_em": "2026-11-05T01:16:27+00:00"
+}
