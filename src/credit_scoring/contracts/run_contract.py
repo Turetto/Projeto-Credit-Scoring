@@ -1,40 +1,42 @@
-import warnings
-
 import pandas as pd
-from pandera.errors import SchemaErrors, SchemaWarning
+from pandera.errors import SchemaErrors
 
 from credit_scoring import config as cfg
-from credit_scoring.contracts.schema import ApplicationSchema
+from credit_scoring.contracts.schema import AlertSchema, ApplicationSchema
 
 
-def run_contract(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
-    """Valida o lote; retorna (falhas rígidas, alertas)."""
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        try:
-            ApplicationSchema.validate(df, lazy=True)
-            failures = pd.DataFrame()
-        except SchemaErrors as err:
-            failures = err.failure_cases
-    alerts = [
-        str(w.message).splitlines()[0] for w in caught if issubclass(w.category, SchemaWarning)
-    ]
-    return failures, alerts
+def _falhas(schema: type, df: pd.DataFrame) -> pd.DataFrame:
+    try:
+        schema.validate(df, lazy=True)
+        return pd.DataFrame(columns=["check", "index"])
+    except SchemaErrors as err:
+        return err.failure_cases
+
+
+def resumo(fc: pd.DataFrame) -> pd.Series:
+    """Linhas únicas afetadas por regra; regras de lote/schema aparecem como 'lote'."""
+    if fc.empty:
+        return pd.Series(dtype=object)
+    return (
+        fc.assign(check=fc["check"].astype(str))
+        .groupby("check")["index"]
+        .agg(lambda s: s.nunique() if s.notna().any() else "lote")
+    )
+
+
+def run_contract(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Retorna (failure_cases rígidas, failure_cases alertas)."""
+    return _falhas(ApplicationSchema, df), _falhas(AlertSchema, df)
 
 
 def main() -> None:
     df = pd.read_parquet(cfg.REFERENCE_DIR / "train.parquet")
-    failures, alerts = run_contract(df)
-
+    rigidas, alertas = run_contract(df)
     print(f"Linhas: {len(df):,}")
-    print("\n=== RÍGIDAS (bloqueariam o lote) ===")
-    if failures.empty:
-        print("nenhuma")
-    else:
-        print(failures.groupby(["column", "check"], dropna=False).size().to_string())
-
-    print("\n=== ALERTAS ===")
-    print("\n".join(alerts) if alerts else "nenhum")
+    for titulo, fc in [("RÍGIDAS (bloqueariam o lote)", rigidas), ("ALERTAS", alertas)]:
+        r = resumo(fc)
+        print(f"\n=== {titulo} ===")
+        print(r.to_string() if not r.empty else "nenhuma")
 
 
 if __name__ == "__main__":
