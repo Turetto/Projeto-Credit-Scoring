@@ -1,0 +1,76 @@
+{
+  "n_por_mes": 4000,
+  "repasse_salarial": 0.6,
+  "meses": {
+    "mes_00": {
+      "inflacao": 0.0,
+      "choque_juros": 0.0,
+      "novo_perfil": 0.0,
+      "desemprego": 0.0,
+      "taxa_default": 0.088,
+      "idade_media": 43.9,
+      "ext_source_2_media": 0.515,
+      "renda_mediana": 144000.0
+    },
+    "mes_01": {
+      "inflacao": 0.03,
+      "choque_juros": 0.02,
+      "novo_perfil": 0.1,
+      "desemprego": 0.0,
+      "taxa_default": 0.0845,
+      "idade_media": 43.3,
+      "ext_source_2_media": 0.5,
+      "renda_mediana": 146592.0
+    },
+    "mes_02": {
+      "inflacao": 0.06,
+      "choque_juros": 0.04,
+      "novo_perfil": 0.2,
+      "desemprego": 0.01,
+      "taxa_default": 0.0998,
+      "idade_media": 43.0,
+      "ext_source_2_media": 0.499,
+      "renda_mediana": 149184.0
+    },
+    "mes_03": {
+      "inflacao": 0.1,
+      "choque_juros": 0.07,
+      "novo_perfil": 0.35,
+      "desemprego": 0.02,
+      "taxa_default": 0.1138,
+      "idade_media": 42.2,
+      "ext_source_2_media": 0.484,
+      "renda_mediana": 164803.5
+    },
+    "mes_04": {
+      "inflacao": 0.15,
+      "choque_juros": 0.1,
+      "novo_perfil": 0.5,
+      "desemprego": 0.03,
+      "taxa_default": 0.1225,
+      "idade_media": 41.4,
+      "ext_source_2_media": 0.47,
+      "renda_mediana": 147150.0
+    },
+    "mes_05": {
+      "inflacao": 0.2,
+      "choque_juros": 0.12,
+      "novo_perfil": 0.65,
+      "desemprego": 0.04,
+      "taxa_default": 0.1245,
+      "idade_media": 41.0,
+      "ext_source_2_media": 0.465,
+      "renda_mediana": 156240.00000000003
+    },
+    "mes_06": {
+      "inflacao": 0.25,
+      "choque_juros": 0.15,
+      "novo_perfil": 0.8,
+      "desemprego": 0.05,
+      "taxa_default": 0.141,
+      "idade_media": 40.0,
+      "ext_source_2_media": 0.448,
+      "renda_mediana": 165600.0
+    }
+  }
+}
