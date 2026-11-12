@@ -6,6 +6,14 @@ dist/
 wheels/
 *.egg-info
 logs/
+reports/drift/*.html
+reports/drift/mes_00.html
+reports/drift/mes_01.html
+reports/drift/mes_02.html
+reports/drift/mes_03.html
+reports/drift/mes_04.html
+reports/drift/mes_05.html
+reports/drift/mes_06.html
 
 # Virtual environments
 .venv
