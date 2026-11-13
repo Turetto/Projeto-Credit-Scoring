@@ -9,7 +9,6 @@ MAX_TAXA_REJEICAO = 0 reproduz a política "tudo ou nada".
 """
 
 import argparse
-import json
 import time
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
@@ -19,12 +18,12 @@ import pandas as pd
 
 from credit_scoring import config as cfg
 from credit_scoring.contracts.run_contract import resumo, run_contract
+from credit_scoring.monitoring.events import registrar
 
 MAX_TAXA_REJEICAO = 0.01
 INCOMING_DIR = cfg.PRODUCTION_DIR / "incoming"
 ACCEPTED_DIR = cfg.PRODUCTION_DIR / "accepted"
 QUARANTINE_DIR = cfg.DATA_DIR / "quarantine"
-LOG_FILE = cfg.ROOT / "logs" / "pipeline.jsonl"
 
 
 @dataclass
@@ -45,13 +44,7 @@ def _contagens(fc: pd.DataFrame) -> dict:
     return {k: (v if v == "lote" else int(v)) for k, v in resumo(fc).items()}
 
 
-def _log(result: GateResult) -> None:
-    LOG_FILE.parent.mkdir(exist_ok=True)
-    with LOG_FILE.open("a", encoding="utf-8") as f:
-        f.write(json.dumps({"etapa": "contract_gate", **asdict(result)}, ensure_ascii=False) + "\n")
-
-
-def run_gate(df: pd.DataFrame, batch_id: str) -> GateResult:
+def run_gate(df: pd.DataFrame, batch_id: str, run_id: str = "manual") -> GateResult:
     t0 = time.perf_counter()
     df = df.reset_index(drop=True)
     rigidas, alertas = run_contract(df)
@@ -94,7 +87,8 @@ def run_gate(df: pd.DataFrame, batch_id: str) -> GateResult:
         duracao_ms=int((time.perf_counter() - t0) * 1000),
         timestamp=datetime.now(UTC).isoformat(timespec="seconds"),
     )
-    _log(result)
+    campos = {k: v for k, v in asdict(result).items() if k not in ("batch_id", "status")}
+    registrar("contract_gate", batch_id, run_id, result.status, **campos)
     return result
 
 
