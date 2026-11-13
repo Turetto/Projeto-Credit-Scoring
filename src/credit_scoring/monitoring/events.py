@@ -66,3 +66,11 @@ def etapa(nome: str, batch_id: str, run_id: str) -> Iterator[dict]:
         raise
     status = campos.pop("status", "SUCESSO")
     registrar(nome, batch_id, run_id, status, duracao_ms=int((time.perf_counter() - t0) * 1000), **campos)
+
+
+def ler_eventos(run_id: str | None = None) -> list[dict]:
+    if not LOG_FILE.exists():
+        return []
+    linhas = LOG_FILE.read_text(encoding="utf-8").splitlines()
+    eventos = [json.loads(x) for x in linhas if x.strip()]
+    return [e for e in eventos if run_id is None or e["run_id"] == run_id]

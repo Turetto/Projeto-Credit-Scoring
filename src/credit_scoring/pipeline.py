@@ -1,0 +1,145 @@
+"""Orquestrador batch.
+
+Para cada lote: gate → scoring → drift (sem rótulos).
+Performance é avaliada com atraso: ao processar o mês t, avalia-se t − LAG_ROTULOS.
+"""
+
+import argparse
+import json
+from pathlib import Path
+
+import joblib
+import pandas as pd
+
+from credit_scoring import config as cfg
+from credit_scoring.contracts.gate import ACCEPTED_DIR, INCOMING_DIR, run_gate
+from credit_scoring.data.features import MODEL_FEATURES
+from credit_scoring.drift.score_batches import SCORED_DIR, performance, pontuar
+from credit_scoring.drift.simulate import LABELS_DIR
+from credit_scoring.drift.stats import eh_categorica, ks, psi
+from credit_scoring.model.train import METRICS_FILE, MODELS_DIR
+from credit_scoring.monitoring import policy
+from credit_scoring.monitoring.events import etapa, ler_eventos, novo_run_id
+
+COLUNAS_DRIFT = [*MODEL_FEATURES, "SCORE"]
+
+
+def medir_drift(ref: pd.DataFrame, cur: pd.DataFrame) -> dict:
+    psis = {c: round(psi(ref[c], cur[c]), 4) for c in COLUNAS_DRIFT}
+    ks_d = {c: round(ks(ref[c], cur[c])[0], 4) for c in COLUNAS_DRIFT if not eh_categorica(ref[c])}
+    feats = {c: v for c, v in psis.items() if c != "SCORE"}
+    return {
+        "psi": psis,
+        "ks_d": ks_d,
+        "features_atencao": sorted(
+            c for c, v in feats.items() if policy.PSI_ATENCAO <= v < policy.PSI_ALERTA
+        ),
+        "features_alerta": sorted(c for c, v in feats.items() if v >= policy.PSI_ALERTA),
+        "psi_score": psis["SCORE"],
+        "status_drift": policy.classificar(max(feats.values()), policy.PSI_ATENCAO, policy.PSI_ALERTA),
+        "status_score": policy.classificar(psis["SCORE"], policy.PSI_ATENCAO, policy.PSI_ALERTA),
+    }
+
+
+def avaliar_performance(lote: str, avaliado_em: str, run_id: str, auc_ref: float) -> None:
+    labels = LABELS_DIR / f"{lote}.parquet"
+    if not labels.exists():
+        return
+    with etapa("performance", lote, run_id) as ev:
+        r = performance(pd.read_parquet(SCORED_DIR / f"{lote}.parquet"), pd.read_parquet(labels), auc_ref)
+        ev.update({k: round(float(v), 4) if isinstance(v, float) else v for k, v in r.items()})
+        ev["avaliado_em"] = avaliado_em
+
+
+def run(lotes: list[Path], run_id: str, flush: bool) -> None:
+    meta = json.loads(METRICS_FILE.read_text(encoding="utf-8"))
+    modelo = joblib.load(MODELS_DIR / "baseline.joblib")
+    ref = pd.read_parquet(cfg.REFERENCE_DIR / "test_scored.parquet")
+    SCORED_DIR.mkdir(parents=True, exist_ok=True)
+    processados: list[str] = []
+
+    for path in lotes:
+        lote = path.stem
+        if run_gate(pd.read_parquet(path), lote, run_id).status == "BLOQUEADO":
+            continue
+
+        with etapa("scoring", lote, run_id) as ev:
+            scored = pontuar(pd.read_parquet(ACCEPTED_DIR / path.name), modelo, meta["threshold_ks"])
+            scored.to_parquet(SCORED_DIR / path.name, index=False)
+            ev.update(
+                linhas=len(scored),
+                pd_media=round(float(scored["SCORE"].mean()), 4),
+                taxa_aprovacao=round(float(scored["APROVADO"].mean()), 4),
+            )
+
+        with etapa("drift", lote, run_id) as ev:
+            ev.update(medir_drift(ref, scored))
+
+        processados.append(lote)
+        if len(processados) > policy.LAG_ROTULOS:  # rótulos do mês t − LAG amadureceram
+            avaliar_performance(processados[-(policy.LAG_ROTULOS + 1)], lote, run_id, meta["teste"]["auc"])
+
+    if flush:  # simula o amadurecimento dos rótulos restantes
+        for lote in processados[-policy.LAG_ROTULOS :]:
+            avaliar_performance(lote, "flush", run_id, meta["teste"]["auc"])
+
+
+def resumo(run_id: str) -> pd.DataFrame:
+    linhas = []
+    for e in ler_eventos(run_id):
+        if e["etapa"] == "drift":
+            linhas.append(
+                {
+                    "lote": e["batch_id"],
+                    "etapa": "drift",
+                    "status": e["status_drift"],
+                    "detalhe": f"alerta={e['features_alerta']} psi_score={e['psi_score']}",
+                }
+            )
+        elif e["etapa"] == "performance":
+            linhas.append(
+                {
+                    "lote": e["batch_id"],
+                    "etapa": f"perf (em {e['avaliado_em']})",
+                    "status": f"auc={e['status_auc']} cal={e['status_calibracao']}",
+                    "detalhe": f"auc={e['auc']} gap={e['gap_calibracao']:+.4f}",
+                }
+            )
+        elif e["etapa"] in ("contract_gate", "scoring") or e["status"] == "FALHA":
+            linhas.append(
+                {
+                    "lote": e["batch_id"],
+                    "etapa": e["etapa"],
+                    "status": e["status"],
+                    "detalhe": f"{e.get('duracao_ms')} ms",
+                }
+            )
+    return pd.DataFrame(linhas)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Pipeline de monitoramento do modelo de crédito")
+    parser.add_argument("--mlflow", action="store_true", help="exporta a execução para o MLflow")
+    parser.add_argument("--padrao", default="mes_*.parquet", help="glob dos lotes em incoming/")
+    parser.add_argument("--flush", action="store_true", help="avalia os rótulos restantes ao final")
+    args = parser.parse_args()
+
+    run_id = novo_run_id()
+    lotes = sorted(INCOMING_DIR.glob(args.padrao))
+    with etapa("pipeline", "*", run_id) as ev:
+        ev["lotes"] = [p.stem for p in lotes]
+        run(lotes, run_id, args.flush)
+
+    if args.mlflow:
+        from credit_scoring.monitoring.mlflow_export import configurar, exportar_run
+
+        configurar()
+        exportar_run(run_id)
+
+    with pd.option_context("display.width", 200, "display.max_colwidth", 90):
+        print(resumo(run_id).to_string(index=False))
+    print(f"\nrun_id = {run_id}")
+
+
+if __name__ == "__main__":
+    main()

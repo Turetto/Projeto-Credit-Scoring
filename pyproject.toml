@@ -9,6 +9,7 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "evidently>=0.7,<0.8",
+    "mlflow>=3",
     "numpy>=2.5.4",
     "pandas>=3.0.6",
     "pandera>=0.35.0",

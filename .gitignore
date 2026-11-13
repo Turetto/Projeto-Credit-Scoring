@@ -14,6 +14,9 @@ reports/drift/mes_03.html
 reports/drift/mes_04.html
 reports/drift/mes_05.html
 reports/drift/mes_06.html
+mlflow.db
+mlruns/
+mlartifacts/
 
 # Virtual environments
 .venv

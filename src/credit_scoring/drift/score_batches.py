@@ -11,6 +11,7 @@ from credit_scoring.contracts.gate import ACCEPTED_DIR
 from credit_scoring.data.features import MODEL_FEATURES, build_features
 from credit_scoring.drift.simulate import LABELS_DIR
 from credit_scoring.model.train import METRICS_FILE, MODELS_DIR, ks
+from credit_scoring.monitoring.policy import GAP_CALIBRACAO, QUEDA_AUC
 
 SCORED_DIR = cfg.PRODUCTION_DIR / "scored"
 PERF_FILE = cfg.ROOT / "reports" / "performance_by_month.csv"
@@ -46,8 +47,8 @@ def performance(scored: pd.DataFrame, labels: pd.DataFrame, auc_ref: float) -> d
         "gap_calibracao": gap,
         "taxa_aprovacao": df["APROVADO"].mean(),
         "default_aprovados": df.loc[df["APROVADO"] == 1, cfg.TARGET].mean(),
-        "status_auc": classificar(auc_ref - auc, *LIMITES["queda_auc"]),
-        "status_calibracao": classificar(abs(gap), *LIMITES["gap_calibracao"]),
+        "status_auc": classificar(auc_ref - auc, *QUEDA_AUC),
+        "status_calibracao": classificar(abs(gap), *GAP_CALIBRACAO),
     }
 
 
