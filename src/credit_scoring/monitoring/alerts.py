@@ -103,15 +103,13 @@ def relatorio_md(run_id: str, alertas: list[dict], lotes: list[str] | None = Non
     if not alertas:
         return "\n".join([*cab, "Nenhum alerta."])
 
-    df = pd.DataFrame(alertas)
-    # Ordem cronológica: lotes processados, depois meses extras, e 'flush' por último
-    conhecidos = set(df["conhecido_em"])
-    ordem = list(dict.fromkeys([*(lotes or []), *sorted(conhecidos - {"flush"})]))
-    if "flush" in conhecidos:
-        ordem.append("flush")
+    ordem = ordem_cronologica(alertas, lotes)
+    notif = escaladas(alertas, ordem)
 
+    df = pd.DataFrame(alertas)
     df["conhecido_em"] = pd.Categorical(df["conhecido_em"], categories=ordem, ordered=True)
     df["nivel"] = df["severidade"].map(policy.NIVEL)
+
     visao = (
         df.pivot_table(index="conhecido_em", columns="origem", values="nivel", aggfunc="max", observed=False)
         .reindex(index=ordem, columns=ORIGENS)
@@ -119,6 +117,7 @@ def relatorio_md(run_id: str, alertas: list[dict], lotes: list[str] | None = Non
         .astype(int)
         .replace({v: k for k, v in policy.NIVEL.items()})
     )
+    notificacoes = pd.DataFrame(notif)[["conhecido_em", "origem", "severidade", "regra", "valor"]]
     detalhe = df.sort_values(["conhecido_em", "nivel"], ascending=[True, False]).drop(columns="nivel")
 
     return "\n".join(
@@ -129,6 +128,12 @@ def relatorio_md(run_id: str, alertas: list[dict], lotes: list[str] | None = Non
             visao.to_markdown(),
             "",
             "`flush` = rótulos que, em tempo real, ainda não teriam amadurecido.",
+            "",
+            "## Notificações (somente escaladas)",
+            "",
+            f"{len(notif)} notificações de {len(alertas)} alertas registrados.",
+            "",
+            notificacoes.to_markdown(index=False, floatfmt=".4f"),
             "",
             "## Detalhe",
             "",
@@ -142,3 +147,28 @@ def escrever_relatorio(run_id: str) -> list[dict]:
     alertas = gerar_alertas(eventos)
     REPORT_FILE.write_text(relatorio_md(run_id, alertas, lotes_da_execucao(eventos)), encoding="utf-8")
     return alertas
+
+
+def ordem_cronologica(alertas: list[dict], lotes: list[str] | None = None) -> list[str]:
+    conhecidos = {a["conhecido_em"] for a in alertas}
+    ordem = list(dict.fromkeys([*(lotes or []), *sorted(conhecidos - {"flush"})]))
+    if "flush" in conhecidos:
+        ordem.append("flush")
+    return ordem
+
+
+def escaladas(alertas: list[dict], ordem: list[str]) -> list[dict]:
+    """Alertas que viram notificação: (origem, regra) nova ou com nível maior que no mês anterior."""
+    anterior: dict[tuple, int] = {}
+    notificar = []
+    for mes in ordem:
+        atuais: dict[tuple, tuple[int, dict]] = {}
+        for a in alertas:
+            if a["conhecido_em"] != mes:
+                continue
+            chave, nivel = (a["origem"], a["regra"]), policy.NIVEL[a["severidade"]]
+            if nivel > atuais.get(chave, (-1, None))[0]:
+                atuais[chave] = (nivel, a)
+        notificar += [a for chave, (nivel, a) in atuais.items() if nivel > anterior.get(chave, 0)]
+        anterior = {chave: nivel for chave, (nivel, _) in atuais.items()}
+    return notificar

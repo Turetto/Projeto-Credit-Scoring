@@ -1,8 +1,8 @@
 # Relatório de alertas
 
-- Execução: `20261113T011557-ffe8b4`
+- Execução: `20261113T012319-d87db9`
 - Política: `v2` (limites em `src/credit_scoring/monitoring/policy.py`)
-- Gerado em: 2026-11-13T01:16:00+00:00
+- Gerado em: 2026-11-13T01:23:21+00:00
 - Total: 32 alertas (20 ALERTA, 12 ATENÇÃO)
 
 ## Visão da operação (pior severidade por origem, no mês em que ficou conhecida)
@@ -19,6 +19,27 @@
 | flush          | ESTÁVEL    | ESTÁVEL    | ESTÁVEL      | ESTÁVEL            | ALERTA        |
 
 `flush` = rótulos que, em tempo real, ainda não teriam amadurecido.
+
+## Notificações (somente escaladas)
+
+14 notificações de 32 alertas registrados.
+
+| conhecido_em   | origem      | severidade   | regra                    |   valor |
+|:---------------|:------------|:-------------|:-------------------------|--------:|
+| mes_02         | data_drift  | ATENÇÃO      | PSI ANNUITY_CREDIT_RATIO |  0.1346 |
+| mes_03         | contrato    | ATENÇÃO      | linhas em quarentena     |  1.0000 |
+| mes_03         | data_drift  | ALERTA       | PSI ANNUITY_CREDIT_RATIO |  0.4258 |
+| mes_03         | data_drift  | ATENÇÃO      | PSI AMT_ANNUITY          |  0.1128 |
+| mes_03         | data_drift  | ATENÇÃO      | PSI AMT_INCOME_TOTAL     |  0.1985 |
+| mes_04         | data_drift  | ATENÇÃO      | PSI AMT_CREDIT           |  0.1184 |
+| mes_05         | data_drift  | ALERTA       | PSI AMT_ANNUITY          |  0.2931 |
+| mes_05         | data_drift  | ALERTA       | PSI AMT_GOODS_PRICE      |  0.8927 |
+| mes_05         | data_drift  | ALERTA       | PSI AMT_INCOME_TOTAL     |  0.2738 |
+| mes_05         | data_drift  | ATENÇÃO      | PSI ANNUITY_INCOME_RATIO |  0.1095 |
+| mes_05         | performance | ALERTA       | queda de AUC             |  0.0515 |
+| mes_05         | performance | ALERTA       | gap de calibração        |  0.0226 |
+| mes_06         | data_drift  | ATENÇÃO      | PSI AGE_YEARS            |  0.1080 |
+| mes_06         | data_drift  | ATENÇÃO      | PSI EXT_SOURCE_2         |  0.1121 |
 
 ## Detalhe
 
