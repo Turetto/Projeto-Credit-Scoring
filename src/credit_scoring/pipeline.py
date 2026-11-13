@@ -142,6 +142,11 @@ def main() -> None:
         ev["lotes"] = [p.stem for p in lotes]
         run(lotes, run_id, args.flush)
 
+    from credit_scoring.monitoring.alerts import REPORT_FILE, escrever_relatorio
+
+    alertas = escrever_relatorio(run_id)
+    print(f"{len(alertas)} alertas → {REPORT_FILE.relative_to(cfg.ROOT)}")
+
     if args.mlflow:
         from credit_scoring.monitoring.mlflow_export import configurar, exportar_run
 

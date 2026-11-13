@@ -14,6 +14,7 @@ import mlflow
 
 from credit_scoring import config as cfg
 from credit_scoring.model.train import METRICS_FILE, MODELS_DIR
+from credit_scoring.monitoring.alerts import gerar_alertas, relatorio_md
 from credit_scoring.monitoring.events import ler_eventos
 from credit_scoring.monitoring.policy import NIVEL
 
@@ -21,8 +22,6 @@ TRACKING_URI = f"sqlite:///{(cfg.ROOT / 'mlflow.db').as_posix()}"
 EXP_MODELO = "credit-scoring-modelo"
 EXP_MONITORAMENTO = "credit-scoring-monitoramento"
 MODELO_REGISTRADO = "credit-scoring-baseline"
-
-
 ARTEFATOS_FIXOS = [
     cfg.ROOT / "reports" / "simulation_config.json",
     cfg.ROOT / "reports" / "drift" / "mes_00.html",
@@ -64,6 +63,85 @@ def registrar_modelo() -> None:
         )
 
 
+def _exportar_evento(e: dict, step: int) -> None:
+    """Publica as métricas de um evento no step do mês do lote."""
+    if e["etapa"] == "contract_gate":
+        mlflow.log_metrics(
+            {
+                "gate_taxa_rejeicao": e["taxa_rejeicao"],
+                "gate_linhas_entrada": e["linhas_entrada"],
+                "gate_bloqueado": int(e["status"] == "BLOQUEADO"),
+                "gate_duracao_ms": e["duracao_ms"],
+            },
+            step=step,
+        )
+
+    elif e["etapa"] == "scoring":
+        mlflow.log_metrics(
+            {
+                "scoring_pd_media": e["pd_media"],
+                "scoring_taxa_aprovacao": e["taxa_aprovacao"],
+                "scoring_duracao_ms": e["duracao_ms"],
+            },
+            step=step,
+        )
+
+    elif e["etapa"] == "drift":
+        mlflow.log_metrics({f"psi_{c}": v for c, v in e["psi"].items()}, step=step)
+        if e["ks_d"]:
+            mlflow.log_metrics({f"ks_d_{c}": v for c, v in e["ks_d"].items()}, step=step)
+        if e.get("delta_mediana"):
+            mlflow.log_metrics({f"delta_mediana_{c}": v for c, v in e["delta_mediana"].items()}, step=step)
+        mlflow.log_metrics(
+            {
+                "drift_nivel": NIVEL[e["status_drift"]],
+                "drift_nivel_score": NIVEL[e["status_score"]],
+                "drift_n_features_alerta": len(e["features_alerta"]),
+                "drift_n_features_atencao": len(e["features_atencao"]),
+                "drift_n_imateriais": len(e.get("imateriais", [])),
+            },
+            step=step,
+        )
+
+    elif e["etapa"] == "performance":
+        metricas = {
+            "perf_auc": e["auc"],
+            "perf_gap_calibracao": e["gap_calibracao"],
+            "perf_default_observado": e["default_observado"],
+            "perf_default_aprovados": e["default_aprovados"],
+            "perf_nivel_auc": NIVEL[e["status_auc"]],
+            "perf_nivel_calibracao": NIVEL[e["status_calibracao"]],
+        }
+        conhecido = _step(e["avaliado_em"])
+        if conhecido is not None:
+            metricas["perf_mes_conhecimento"] = conhecido
+        mlflow.log_metrics(metricas, step=step)  # série no mês em que a degradação ocorreu
+
+        if conhecido is not None:  # série no mês em que a operação ficou sabendo
+            mlflow.log_metrics(
+                {
+                    "operacao_nivel_auc": NIVEL[e["status_auc"]],
+                    "operacao_nivel_calibracao": NIVEL[e["status_calibracao"]],
+                },
+                step=conhecido,
+            )
+
+
+def _exportar_alertas(run_id: str, eventos: list[dict]) -> None:
+    """Contagem de alertas por mês de conhecimento + relatório como artefato."""
+    alertas = gerar_alertas(eventos)
+    por_mes: dict[int, dict[str, int]] = {}
+    for a in alertas:
+        s = _step(a["conhecido_em"])
+        if s is None:
+            continue
+        chave = "alertas_alerta" if a["severidade"] == "ALERTA" else "alertas_atencao"
+        por_mes.setdefault(s, {"alertas_alerta": 0, "alertas_atencao": 0})[chave] += 1
+    for s, contagem in por_mes.items():
+        mlflow.log_metrics(contagem, step=s)
+    mlflow.log_text(relatorio_md(run_id, alertas), "relatorios/alertas.md")
+
+
 def exportar_run(run_id: str) -> None:
     eventos = ler_eventos(run_id)
     if not eventos:
@@ -72,71 +150,18 @@ def exportar_run(run_id: str) -> None:
     mlflow.set_experiment(EXP_MONITORAMENTO)
     with mlflow.start_run(run_name=run_id):
         mlflow.set_tag("pipeline_run_id", run_id)
-        execucoes: dict[str, int] = {}
 
+        execucoes: dict[str, int] = {}
         for e in eventos:
             chave = f"execucoes_{e['etapa']}_{e['status']}"
             execucoes[chave] = execucoes.get(chave, 0) + 1
             step = _step(e["batch_id"])
-            if step is None:
-                continue
-
-            if e["etapa"] == "contract_gate":
-                mlflow.log_metrics(
-                    {
-                        "gate_taxa_rejeicao": e["taxa_rejeicao"],
-                        "gate_linhas_entrada": e["linhas_entrada"],
-                        "gate_bloqueado": int(e["status"] == "BLOQUEADO"),
-                        "gate_duracao_ms": e["duracao_ms"],
-                    },
-                    step=step,
-                )
-            elif e["etapa"] == "scoring":
-                mlflow.log_metrics(
-                    {
-                        "scoring_pd_media": e["pd_media"],
-                        "scoring_taxa_aprovacao": e["taxa_aprovacao"],
-                        "scoring_duracao_ms": e["duracao_ms"],
-                    },
-                    step=step,
-                )
-            elif e["etapa"] == "drift":
-                mlflow.log_metrics({f"psi_{c}": v for c, v in e["psi"].items()}, step=step)
-                if e["ks_d"]:
-                    mlflow.log_metrics({f"ks_d_{c}": v for c, v in e["ks_d"].items()}, step=step)
-                mlflow.log_metrics(
-                    {
-                        "drift_nivel": NIVEL[e["status_drift"]],
-                        "drift_nivel_score": NIVEL[e["status_score"]],
-                        "drift_n_features_alerta": len(e["features_alerta"]),
-                        "drift_n_features_atencao": len(e["features_atencao"]),
-                    },
-                    step=step,
-                )
-            elif e["etapa"] == "performance":
-                metricas = {
-                    "perf_auc": e["auc"],
-                    "perf_gap_calibracao": e["gap_calibracao"],
-                    "perf_default_observado": e["default_observado"],
-                    "perf_default_aprovados": e["default_aprovados"],
-                    "perf_nivel_auc": NIVEL[e["status_auc"]],
-                    "perf_nivel_calibracao": NIVEL[e["status_calibracao"]],
-                }
-                conhecido = _step(e["avaliado_em"])
-                if conhecido is not None:
-                    metricas["perf_mes_conhecimento"] = conhecido
-                mlflow.log_metrics(metricas, step=step)  # série no mês em que a degradação ocorreu
-
-                if conhecido is not None:  # série no mês em que a operação ficou sabendo
-                    mlflow.log_metrics(
-                        {
-                            "operacao_nivel_auc": NIVEL[e["status_auc"]],
-                            "operacao_nivel_calibracao": NIVEL[e["status_calibracao"]],
-                        },
-                        step=conhecido,
-                    )
-
+            if step is not None:
+                _exportar_evento(e, step)
         mlflow.log_metrics(execucoes)
+
+        _exportar_alertas(run_id, eventos)
+
         with tempfile.TemporaryDirectory() as tmp:
             arquivo = Path(tmp) / f"eventos_{run_id}.jsonl"
             arquivo.write_text(
