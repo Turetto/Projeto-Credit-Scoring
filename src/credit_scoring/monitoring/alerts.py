@@ -20,6 +20,13 @@ ACOES = {
     "execucao": "Verificar o log da etapa e reexecutar o lote após a correção.",
 }
 
+ORIGENS = ["execucao", "contrato", "data_drift", "prediction_drift", "performance"]
+
+
+def lotes_da_execucao(eventos: list[dict]) -> list[str]:
+    """Lotes na ordem em que foram processados."""
+    return list(dict.fromkeys(e["batch_id"] for e in eventos if e["etapa"] == "contract_gate"))
+
 
 def _alerta(e: dict, origem: str, severidade: str, regra: str, valor, acao: str) -> dict:
     return {
@@ -81,7 +88,7 @@ def gerar_alertas(eventos: list[dict]) -> list[dict]:
     return alertas
 
 
-def relatorio_md(run_id: str, alertas: list[dict]) -> str:
+def relatorio_md(run_id: str, alertas: list[dict], lotes: list[str] | None = None) -> str:
     cab = [
         "# Relatório de alertas",
         "",
@@ -97,9 +104,17 @@ def relatorio_md(run_id: str, alertas: list[dict]) -> str:
         return "\n".join([*cab, "Nenhum alerta."])
 
     df = pd.DataFrame(alertas)
+    # Ordem cronológica: lotes processados, depois meses extras, e 'flush' por último
+    conhecidos = set(df["conhecido_em"])
+    ordem = list(dict.fromkeys([*(lotes or []), *sorted(conhecidos - {"flush"})]))
+    if "flush" in conhecidos:
+        ordem.append("flush")
+
+    df["conhecido_em"] = pd.Categorical(df["conhecido_em"], categories=ordem, ordered=True)
     df["nivel"] = df["severidade"].map(policy.NIVEL)
     visao = (
-        df.pivot_table(index="conhecido_em", columns="origem", values="nivel", aggfunc="max")
+        df.pivot_table(index="conhecido_em", columns="origem", values="nivel", aggfunc="max", observed=False)
+        .reindex(index=ordem, columns=ORIGENS)
         .fillna(0)
         .astype(int)
         .replace({v: k for k, v in policy.NIVEL.items()})
@@ -113,6 +128,8 @@ def relatorio_md(run_id: str, alertas: list[dict]) -> str:
             "",
             visao.to_markdown(),
             "",
+            "`flush` = rótulos que, em tempo real, ainda não teriam amadurecido.",
+            "",
             "## Detalhe",
             "",
             detalhe.to_markdown(index=False, floatfmt=".4f"),
@@ -121,6 +138,7 @@ def relatorio_md(run_id: str, alertas: list[dict]) -> str:
 
 
 def escrever_relatorio(run_id: str) -> list[dict]:
-    alertas = gerar_alertas(ler_eventos(run_id))
-    REPORT_FILE.write_text(relatorio_md(run_id, alertas), encoding="utf-8")
+    eventos = ler_eventos(run_id)
+    alertas = gerar_alertas(eventos)
+    REPORT_FILE.write_text(relatorio_md(run_id, alertas, lotes_da_execucao(eventos)), encoding="utf-8")
     return alertas

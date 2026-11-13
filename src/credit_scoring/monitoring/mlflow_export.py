@@ -14,7 +14,7 @@ import mlflow
 
 from credit_scoring import config as cfg
 from credit_scoring.model.train import METRICS_FILE, MODELS_DIR
-from credit_scoring.monitoring.alerts import gerar_alertas, relatorio_md
+from credit_scoring.monitoring.alerts import gerar_alertas, lotes_da_execucao, relatorio_md
 from credit_scoring.monitoring.events import ler_eventos
 from credit_scoring.monitoring.policy import NIVEL
 
@@ -139,7 +139,7 @@ def _exportar_alertas(run_id: str, eventos: list[dict]) -> None:
         por_mes.setdefault(s, {"alertas_alerta": 0, "alertas_atencao": 0})[chave] += 1
     for s, contagem in por_mes.items():
         mlflow.log_metrics(contagem, step=s)
-    mlflow.log_text(relatorio_md(run_id, alertas), "relatorios/alertas.md")
+    mlflow.log_text(relatorio_md(run_id, alertas, lotes_da_execucao(eventos)), "relatorios/alertas.md")
 
 
 def exportar_run(run_id: str) -> None:

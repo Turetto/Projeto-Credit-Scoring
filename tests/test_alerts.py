@@ -32,3 +32,29 @@ def test_drift_estavel_nao_gera_alerta_e_relatorio_vazio():
     ]
     assert gerar_alertas(eventos) == []
     assert "Nenhum alerta" in relatorio_md("r", [])
+
+
+def test_visao_inclui_meses_sem_alerta_e_flush_por_ultimo():
+    eventos = [
+        _ev(
+            "drift",
+            lote="mes_02",
+            features_alerta=[],
+            features_atencao=["AGE_YEARS"],
+            psi={"AGE_YEARS": 0.12},
+            psi_score=0.01,
+            status_score="ESTÁVEL",
+        ),
+        _ev(
+            "performance",
+            lote="mes_02",
+            avaliado_em="flush",
+            status_auc="ALERTA",
+            queda_auc=0.05,
+            status_calibracao="ESTÁVEL",
+            gap_calibracao=0.001,
+        ),
+    ]
+    visao = relatorio_md("r", gerar_alertas(eventos), ["mes_00", "mes_01", "mes_02"]).split("## Detalhe")[0]
+    assert visao.index("mes_00") < visao.index("mes_02") < visao.index("flush")
+    assert "prediction_drift" in visao
