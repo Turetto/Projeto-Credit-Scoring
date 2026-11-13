@@ -27,16 +27,28 @@ COLUNAS_DRIFT = [*MODEL_FEATURES, "SCORE"]
 def medir_drift(ref: pd.DataFrame, cur: pd.DataFrame) -> dict:
     psis = {c: round(psi(ref[c], cur[c]), 4) for c in COLUNAS_DRIFT}
     ks_d = {c: round(ks(ref[c], cur[c])[0], 4) for c in COLUNAS_DRIFT if not eh_categorica(ref[c])}
-    feats = {c: v for c, v in psis.items() if c != "SCORE"}
+    delta = {c: round(float(cur[c].median() / ref[c].median() - 1), 4) for c in policy.VARIAVEIS_NOMINAIS}
+
+    niveis, imateriais = {}, []
+    for c, valor in psis.items():
+        if c == "SCORE":
+            continue
+        nivel = policy.classificar(valor, policy.PSI_ATENCAO, policy.PSI_ALERTA)
+        if c in delta and nivel != "ESTÁVEL" and abs(delta[c]) < policy.MATERIALIDADE_NOMINAL:
+            imateriais.append(c)  # mudança estatística sem relevância econômica
+            nivel = "ESTÁVEL"
+        niveis[c] = nivel
+
     return {
+        "politica": policy.VERSAO,
         "psi": psis,
         "ks_d": ks_d,
-        "features_atencao": sorted(
-            c for c, v in feats.items() if policy.PSI_ATENCAO <= v < policy.PSI_ALERTA
-        ),
-        "features_alerta": sorted(c for c, v in feats.items() if v >= policy.PSI_ALERTA),
+        "delta_mediana": delta,
+        "imateriais": sorted(imateriais),
+        "features_atencao": sorted(c for c, n in niveis.items() if n == "ATENÇÃO"),
+        "features_alerta": sorted(c for c, n in niveis.items() if n == "ALERTA"),
         "psi_score": psis["SCORE"],
-        "status_drift": policy.classificar(max(feats.values()), policy.PSI_ATENCAO, policy.PSI_ALERTA),
+        "status_drift": max(niveis.values(), key=policy.NIVEL.get),
         "status_score": policy.classificar(psis["SCORE"], policy.PSI_ATENCAO, policy.PSI_ALERTA),
     }
 

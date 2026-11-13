@@ -14,3 +14,12 @@ def classificar(valor: float, atencao: float, alerta: float) -> str:
     if valor >= alerta:
         return "ALERTA"
     return "ATENÇÃO" if valor >= atencao else "ESTÁVEL"
+
+
+VERSAO = "v2"  # v1 (2.1): PSI/AUC/gap · v2 (3.5): + materialidade nas variáveis nominais
+
+# Variáveis monetárias nominais derivam com a inflação; só é alerta se a mudança for material.
+VARIAVEIS_NOMINAIS = ["AMT_CREDIT", "AMT_ANNUITY", "AMT_GOODS_PRICE", "AMT_INCOME_TOTAL"]
+MATERIALIDADE_NOMINAL = 0.05  # |Δ mediana| mínimo vs referência
+
+NIVEL = {"ESTÁVEL": 0, "ATENÇÃO": 1, "ALERTA": 2}

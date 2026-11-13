@@ -15,12 +15,14 @@ import mlflow
 from credit_scoring import config as cfg
 from credit_scoring.model.train import METRICS_FILE, MODELS_DIR
 from credit_scoring.monitoring.events import ler_eventos
+from credit_scoring.monitoring.policy import NIVEL
 
 TRACKING_URI = f"sqlite:///{(cfg.ROOT / 'mlflow.db').as_posix()}"
 EXP_MODELO = "credit-scoring-modelo"
 EXP_MONITORAMENTO = "credit-scoring-monitoramento"
 MODELO_REGISTRADO = "credit-scoring-baseline"
-NIVEL = {"ESTÁVEL": 0, "ATENÇÃO": 1, "ALERTA": 2}
+
+
 ARTEFATOS_FIXOS = [
     cfg.ROOT / "reports" / "simulation_config.json",
     cfg.ROOT / "reports" / "drift" / "mes_00.html",
