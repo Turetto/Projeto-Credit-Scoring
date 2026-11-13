@@ -4,13 +4,14 @@ import pandas as pd
 import pytest
 
 from credit_scoring.contracts import gate
+from credit_scoring.monitoring import events
 
 
 @pytest.fixture(autouse=True)
 def _diretorios_temporarios(tmp_path, monkeypatch):
     monkeypatch.setattr(gate, "ACCEPTED_DIR", tmp_path / "accepted")
     monkeypatch.setattr(gate, "QUARANTINE_DIR", tmp_path / "quarantine")
-    monkeypatch.setattr(gate, "LOG_FILE", tmp_path / "logs" / "pipeline.jsonl")
+    monkeypatch.setattr(events, "LOG_FILE", tmp_path / "logs" / "pipeline.jsonl")
 
 
 def test_lote_limpo_e_aceito(make_batch):
@@ -48,9 +49,9 @@ def test_politica_tudo_ou_nada(make_batch, monkeypatch):
 
 
 def test_gate_registra_evento_estruturado(make_batch, tmp_path):
-    gate.run_gate(make_batch(10), "t")
+    gate.run_gate(make_batch(10), "t", run_id="r1")
     linha = (tmp_path / "logs" / "pipeline.jsonl").read_text(encoding="utf-8").splitlines()[-1]
     evento = json.loads(linha)
     assert evento["etapa"] == "contract_gate"
-    assert evento["batch_id"] == "t"
-    assert evento["status"] == "ACEITO"
+    assert (evento["batch_id"], evento["run_id"], evento["status"]) == ("t", "r1", "ACEITO")
+    assert "timestamp" in evento and "duracao_ms" in evento
