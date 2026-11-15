@@ -36,7 +36,7 @@ CATEGORICAL_FEATURES = [
 ]
 MODEL_FEATURES = NUMERIC_FEATURES + CATEGORICAL_FEATURES
 
-# Chave (rastreabilidade/rótulos atrasados), rótulo e atributo sensível (só auditoria)
+# Chave, rótulo e atributo de auditoria de viés
 EXCLUDED_FROM_MODEL = ["SK_ID_CURR", "TARGET", "CODE_GENDER"]
 
 

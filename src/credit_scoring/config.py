@@ -10,7 +10,8 @@ SEED = 42
 ID_COL = "SK_ID_CURR"
 TARGET = "TARGET"
 
-SENSITIVE_COLS = ["CODE_GENDER"]
+# Fora do modelo (não discriminação, art. 6º, IX LGPD); mantido só para auditoria de viés
+AUDIT_ONLY_COLS = ["CODE_GENDER"]
 
 FEATURES = [
     # Contrato

@@ -3,7 +3,7 @@ from sklearn.model_selection import train_test_split
 
 from credit_scoring import config as cfg
 
-COLUMNS = [cfg.ID_COL, cfg.TARGET, *cfg.SENSITIVE_COLS, *cfg.FEATURES]
+COLUMNS = [cfg.ID_COL, cfg.TARGET, *cfg.AUDIT_ONLY_COLS, *cfg.FEATURES]
 
 
 def load_raw() -> pd.DataFrame:
