@@ -28,7 +28,7 @@
 | Q4 | `DAYS_BIRTH` | Idade de 21,0 a 69,0 anos | Idade entre 18 e 100 anos | Rígida |
 | Q4 | `DAYS_BIRTH` | Range observado | Idade entre 21 e 70 anos | Alerta |
 | Q5 | `AMT_INCOME_TOTAL` | Mínimo de 25.650, sem zeros | > 0 e não nulo | Rígida |
-| Q5 | `AMT_INCOME_TOTAL` | Máx de 117M = 130× o p99,9 (900k); linha com crédito de 562k e parcela de 26k → erro | ≤ 50.000.000 | Rígida |
+| Q5 | `AMT_INCOME_TOTAL` | Um registro isolado com renda ~130× o p99,9, incoerente com o crédito e a parcela solicitados → erro de digitação | ≤ 50.000.000 | Rígida |
 | Q5 | `AMT_INCOME_TOTAL` | 18M e 9M coerentes com crédito/parcela → legítimos | > 1.000.000 | Alerta |
 | Q6 | `CODE_GENDER` | 1 linha `XNA`; coluna fora do modelo (só auditoria de viés) | Domínio {F, M, XNA}; `XNA` gera alerta | Alerta |
 | Q6 | `NAME_FAMILY_STATUS` | 1 linha `Unknown` | Domínio fechado (6 valores observados); `Unknown` gera alerta | Rígida (domínio) + Alerta |
