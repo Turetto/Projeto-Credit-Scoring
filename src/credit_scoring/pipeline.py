@@ -1,7 +1,8 @@
 """Orquestrador batch.
 
-Para cada lote: gate → scoring → drift (sem rótulos).
-Performance é avaliada com atraso: ao processar o mês t, avalia-se t − LAG_ROTULOS.
+Para cada lote: gate → scoring (+ fairness de aprovação) → drift (sem rótulos).
+Performance é avaliada com atraso: ao processar o mês t, avalia-se t LAG_ROTULOS
+(+ dispersão de calibração por faixa etária).
 """
 
 import argparse
@@ -28,6 +29,9 @@ from credit_scoring.monitoring import policy
 from credit_scoring.monitoring.events import etapa, ler_eventos, novo_run_id
 
 COLUNAS_DRIFT = [*MODEL_FEATURES, "SCORE"]
+
+
+# ---------------------------------------------------------------- medições
 
 
 def medir_drift(ref: pd.DataFrame, cur: pd.DataFrame) -> dict:
@@ -64,7 +68,8 @@ def avaliar_performance(lote: str, avaliado_em: str, run_id: str, auc_ref: float
     if not labels_path.exists():
         return
     with etapa("performance", lote, run_id) as ev:
-        scored, labels = pd.read_parquet(SCORED_DIR / f"{lote}.parquet"), pd.read_parquet(labels_path)
+        scored = pd.read_parquet(SCORED_DIR / f"{lote}.parquet")
+        labels = pd.read_parquet(labels_path)
         r = performance(scored, labels, auc_ref)
         ev.update({k: round(float(v), 4) if isinstance(v, float) else v for k, v in r.items()})
         ev["avaliado_em"] = avaliado_em
@@ -76,11 +81,15 @@ def avaliar_performance(lote: str, avaliado_em: str, run_id: str, auc_ref: float
             )
 
 
+# ---------------------------------------------------------------- execução
+
+
 def run(lotes: list[Path], run_id: str, flush: bool) -> None:
     meta = json.loads(METRICS_FILE.read_text(encoding="utf-8"))
     modelo = joblib.load(MODELS_DIR / "baseline.joblib")
     ref = pd.read_parquet(cfg.REFERENCE_DIR / "test_scored.parquet")
     base_fair = json.loads(BASELINE_FILE.read_text(encoding="utf-8")) if BASELINE_FILE.exists() else None
+    auc_ref = meta["teste"]["auc"]
     SCORED_DIR.mkdir(parents=True, exist_ok=True)
     processados: list[str] = []
 
@@ -100,8 +109,7 @@ def run(lotes: list[Path], run_id: str, flush: bool) -> None:
             if base_fair:
                 q = queda_air(air_aprovacao(scored), base_fair["air"])
                 ev.update(
-                    queda_air_max=round(q, 4),
-                    status_fairness=policy.classificar(q, *base_fair["limites"]["queda_air"]),
+                    queda_air_max=round(q, 4), status_fairness=policy.classificar(q, *base_fair["limites"]["queda_air"])
                 )
 
         with etapa("drift", lote, run_id) as ev:
@@ -109,17 +117,45 @@ def run(lotes: list[Path], run_id: str, flush: bool) -> None:
 
         processados.append(lote)
         if len(processados) > policy.LAG_ROTULOS:  # rótulos do mês t − LAG amadureceram
-            avaliar_performance(processados[-(policy.LAG_ROTULOS + 1)], lote, run_id, meta["teste"]["auc"])
+            avaliar_performance(processados[-(policy.LAG_ROTULOS + 1)], lote, run_id, auc_ref, base_fair)
 
     if flush:  # simula o amadurecimento dos rótulos restantes
         for lote in processados[-policy.LAG_ROTULOS :]:
-            avaliar_performance(lote, "flush", run_id, meta["teste"]["auc"])
+            avaliar_performance(lote, "flush", run_id, auc_ref, base_fair)
 
 
 def resumo(run_id: str) -> pd.DataFrame:
     linhas = []
     for e in ler_eventos(run_id):
-        if e["etapa"] == "drift":
+        if e["status"] == "FALHA":
+            linhas.append(
+                {
+                    "lote": e["batch_id"],
+                    "etapa": e["etapa"],
+                    "status": "FALHA",
+                    "detalhe": f"{e.get('erro')}: {e.get('mensagem')}",
+                }
+            )
+        elif e["etapa"] == "contract_gate":
+            linhas.append(
+                {
+                    "lote": e["batch_id"],
+                    "etapa": "contract_gate",
+                    "status": e["status"],
+                    "detalhe": f"{e.get('duracao_ms')} ms",
+                }
+            )
+        elif e["etapa"] == "scoring":
+            fair = f" queda_air={e['queda_air_max']} ({e['status_fairness']})" if "queda_air_max" in e else ""
+            linhas.append(
+                {
+                    "lote": e["batch_id"],
+                    "etapa": "scoring",
+                    "status": e["status"],
+                    "detalhe": f"{e.get('duracao_ms')} ms{fair}",
+                }
+            )
+        elif e["etapa"] == "drift":
             linhas.append(
                 {
                     "lote": e["batch_id"],
@@ -129,21 +165,17 @@ def resumo(run_id: str) -> pd.DataFrame:
                 }
             )
         elif e["etapa"] == "performance":
+            disp = (
+                f" disp={e['dispersao_calibracao']:+.4f} ({e['status_dispersao']})"
+                if "dispersao_calibracao" in e
+                else ""
+            )
             linhas.append(
                 {
                     "lote": e["batch_id"],
                     "etapa": f"perf (em {e['avaliado_em']})",
                     "status": f"auc={e['status_auc']} cal={e['status_calibracao']}",
-                    "detalhe": f"auc={e['auc']} gap={e['gap_calibracao']:+.4f}",
-                }
-            )
-        elif e["etapa"] in ("contract_gate", "scoring") or e["status"] == "FALHA":
-            linhas.append(
-                {
-                    "lote": e["batch_id"],
-                    "etapa": e["etapa"],
-                    "status": e["status"],
-                    "detalhe": f"{e.get('duracao_ms')} ms",
+                    "detalhe": f"auc={e['auc']} gap={e['gap_calibracao']:+.4f}{disp}",
                 }
             )
     return pd.DataFrame(linhas)
@@ -151,9 +183,9 @@ def resumo(run_id: str) -> pd.DataFrame:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Pipeline de monitoramento do modelo de crédito")
-    parser.add_argument("--mlflow", action="store_true", help="exporta a execução para o MLflow")
     parser.add_argument("--padrao", default="mes_*.parquet", help="glob dos lotes em incoming/")
     parser.add_argument("--flush", action="store_true", help="avalia os rótulos restantes ao final")
+    parser.add_argument("--mlflow", action="store_true", help="exporta a execução para o MLflow")
     args = parser.parse_args()
 
     run_id = novo_run_id()
@@ -165,7 +197,6 @@ def main() -> None:
     from credit_scoring.monitoring.alerts import REPORT_FILE, escrever_relatorio
 
     alertas = escrever_relatorio(run_id)
-    print(f"{len(alertas)} alertas → {REPORT_FILE.relative_to(cfg.ROOT)}")
 
     if args.mlflow:
         from credit_scoring.monitoring.mlflow_export import configurar, exportar_run
@@ -173,9 +204,10 @@ def main() -> None:
         configurar()
         exportar_run(run_id)
 
-    with pd.option_context("display.width", 200, "display.max_colwidth", 90):
+    with pd.option_context("display.width", 220, "display.max_colwidth", 110):
         print(resumo(run_id).to_string(index=False))
-    print(f"\nrun_id = {run_id}")
+    print(f"\n{len(alertas)} alertas → {REPORT_FILE.relative_to(cfg.ROOT)}")
+    print(f"run_id = {run_id}")
 
 
 if __name__ == "__main__":
