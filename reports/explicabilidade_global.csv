@@ -1,0 +1,22 @@
+fator,feature,participacao
+Score de crédito externo (bureau 3),EXT_SOURCE_3,0.1722
+Score de crédito externo (bureau 2),EXT_SOURCE_2,0.164
+Valor do bem financiado,AMT_GOODS_PRICE,0.0952
+Score de crédito externo (bureau 1),EXT_SOURCE_1,0.0884
+Prazo e taxa do contrato (parcela em relação ao crédito),ANNUITY_CREDIT_RATIO,0.0854
+Tempo no emprego atual,YEARS_EMPLOYED,0.0682
+Valor da parcela,AMT_ANNUITY,0.0557
+Escolaridade,NAME_EDUCATION_TYPE,0.0446
+Idade,AGE_YEARS,0.0399
+Valor do crédito solicitado,AMT_CREDIT,0.0385
+Posse de veículo,FLAG_OWN_CAR,0.0308
+Modalidade do crédito,NAME_CONTRACT_TYPE,0.0263
+Estado civil,NAME_FAMILY_STATUS,0.0227
+Classificação de risco da região,REGION_RATING_CLIENT,0.0163
+Comprometimento da renda com a parcela,ANNUITY_INCOME_RATIO,0.0153
+Tipo de renda,NAME_INCOME_TYPE,0.0115
+Crédito em relação à renda,CREDIT_INCOME_RATIO,0.0095
+Renda declarada,AMT_INCOME_TOTAL,0.0086
+Posse de imóvel,FLAG_OWN_REALTY,0.0046
+Número de filhos,CNT_CHILDREN,0.002
+Sem vínculo empregatício (ex.: aposentadoria),FLAG_EMPLOYED_ANOMALY,0.0003
