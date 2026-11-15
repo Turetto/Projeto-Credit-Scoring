@@ -17,6 +17,12 @@ from credit_scoring.data.features import MODEL_FEATURES
 from credit_scoring.drift.score_batches import SCORED_DIR, performance, pontuar
 from credit_scoring.drift.simulate import LABELS_DIR
 from credit_scoring.drift.stats import eh_categorica, ks, psi
+from credit_scoring.governance.fairness import (
+    BASELINE_FILE,
+    air_aprovacao,
+    dispersao_calibracao,
+    queda_air,
+)
 from credit_scoring.model.train import METRICS_FILE, MODELS_DIR
 from credit_scoring.monitoring import policy
 from credit_scoring.monitoring.events import etapa, ler_eventos, novo_run_id
@@ -53,20 +59,28 @@ def medir_drift(ref: pd.DataFrame, cur: pd.DataFrame) -> dict:
     }
 
 
-def avaliar_performance(lote: str, avaliado_em: str, run_id: str, auc_ref: float) -> None:
-    labels = LABELS_DIR / f"{lote}.parquet"
-    if not labels.exists():
+def avaliar_performance(lote: str, avaliado_em: str, run_id: str, auc_ref: float, base_fair: dict | None) -> None:
+    labels_path = LABELS_DIR / f"{lote}.parquet"
+    if not labels_path.exists():
         return
     with etapa("performance", lote, run_id) as ev:
-        r = performance(pd.read_parquet(SCORED_DIR / f"{lote}.parquet"), pd.read_parquet(labels), auc_ref)
+        scored, labels = pd.read_parquet(SCORED_DIR / f"{lote}.parquet"), pd.read_parquet(labels_path)
+        r = performance(scored, labels, auc_ref)
         ev.update({k: round(float(v), 4) if isinstance(v, float) else v for k, v in r.items()})
         ev["avaliado_em"] = avaliado_em
+        if base_fair:
+            disp = dispersao_calibracao(scored.merge(labels, on=cfg.ID_COL))
+            ev.update(
+                dispersao_calibracao=round(disp, 4),
+                status_dispersao=policy.classificar(disp, *base_fair["limites"]["dispersao_calibracao"]),
+            )
 
 
 def run(lotes: list[Path], run_id: str, flush: bool) -> None:
     meta = json.loads(METRICS_FILE.read_text(encoding="utf-8"))
     modelo = joblib.load(MODELS_DIR / "baseline.joblib")
     ref = pd.read_parquet(cfg.REFERENCE_DIR / "test_scored.parquet")
+    base_fair = json.loads(BASELINE_FILE.read_text(encoding="utf-8")) if BASELINE_FILE.exists() else None
     SCORED_DIR.mkdir(parents=True, exist_ok=True)
     processados: list[str] = []
 
@@ -83,6 +97,12 @@ def run(lotes: list[Path], run_id: str, flush: bool) -> None:
                 pd_media=round(float(scored["SCORE"].mean()), 4),
                 taxa_aprovacao=round(float(scored["APROVADO"].mean()), 4),
             )
+            if base_fair:
+                q = queda_air(air_aprovacao(scored), base_fair["air"])
+                ev.update(
+                    queda_air_max=round(q, 4),
+                    status_fairness=policy.classificar(q, *base_fair["limites"]["queda_air"]),
+                )
 
         with etapa("drift", lote, run_id) as ev:
             ev.update(medir_drift(ref, scored))
