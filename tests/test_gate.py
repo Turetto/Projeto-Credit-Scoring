@@ -55,3 +55,16 @@ def test_gate_registra_evento_estruturado(make_batch, tmp_path):
     assert evento["etapa"] == "contract_gate"
     assert (evento["batch_id"], evento["run_id"], evento["status"]) == ("t", "r1", "ACEITO")
     assert "timestamp" in evento and "duracao_ms" in evento
+
+
+def test_log_nao_contem_valores_de_clientes(make_batch, tmp_path):
+    df = make_batch(200)
+    df.loc[0, "SK_ID_CURR"] = 987654321  # ID marcador
+    df.loc[0, "AMT_INCOME_TOTAL"] = 123456.78  # valor marcador
+    df.loc[0, "DAYS_BIRTH"] = -5000  # força rejeição: o caminho de maior risco
+    gate.run_gate(df, "t")
+
+    log = (tmp_path / "logs" / "pipeline.jsonl").read_text(encoding="utf-8")
+    assert "987654321" not in log
+    assert "123456.78" not in log
+    assert "-5000" not in log
